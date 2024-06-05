@@ -1,0 +1,6 @@
+.git/
+main
+build/
+.cache/
+compile_commands.json
+raylib/
