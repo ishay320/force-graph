@@ -5,7 +5,7 @@ TARGET=main
 RAYLIB_INC=-I./raylib/build/raylib/include/
 RAYLIB_LIB=-L./raylib/build/raylib/ -lraylib -Wl,-rpath=./raylib/build/raylib/ 
 
-build/${TARGET}: ${SRC} | build/
+build/${TARGET}: ${SRC} da.h | build/
 	cc ${RAYLIB_INC} ${RAYLIB_LIB} ${CFLAGS} $< -o $@
 
 build/:
