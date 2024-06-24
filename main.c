@@ -2,6 +2,7 @@
 #include <stdbool.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <time.h>
 
 #include "da.h"
 #include "raylib.h"
@@ -160,16 +161,50 @@ void graph_push(struct node *root)
     }
 }
 
+void Vector2Print(const Vector2 v) { printf("(%f,%f)\n", v.x, v.y); }
+
+Vector2 Vector2DivideVal(Vector2 v, float s)
+{
+    Vector2 result = {v.x / s, v.y / s};
+
+    return result;
+}
+
+Vector2 Vector2MultiplyVal(Vector2 v, float s)
+{
+    Vector2 result = {v.x * s, v.y * s};
+
+    return result;
+}
+
 int main(void)
 {
-    const int screen_width  = 800;
-    const int screen_height = 450;
+    srand(time(NULL));
+    const int screen_width  = 1280;
+    const int screen_height = 720;
 
     struct node *root = node_create((struct payload){"foo", {50, 30}, {0, 0}});
     add_random_node(root, 10);
     add_random_node(root->data[0], 10);
 
     InitWindow(screen_width, screen_height, "graph");
+
+    size_t p_len = 200;
+    struct payload p[p_len];
+    for (size_t i = 0; i < p_len; i++) {
+        p[i] = (struct payload){"r", {rand() % 500, rand() % 500}, {0, 0}};
+    }
+
+    struct connection {
+        struct payload *a;
+        struct payload *b;
+    };
+
+    size_t connection_len = 200;
+    struct connection c_list[connection_len];
+    for (size_t i = 0; i < p_len; i++) {
+        c_list[i] = (struct connection){&p[rand() % p_len], &p[rand() % p_len]};
+    }
 
     SetTargetFPS(60);
     while (!WindowShouldClose())  // Detect window close button or ESC key
@@ -178,19 +213,58 @@ int main(void)
         ClearBackground(RAYWHITE);
         DrawFPS(10, 10);
 
-        {  // pull root to the middle of the screen
+        {  // gravity toward the middle of the screen
             const float scale = 0.1;
             Vector2 middle    = middle_of_screen();
-            const float force = Vector2Distance(middle, root->payload.pos);
-            Vector2 a_vel =
-                Vector2PullVel(middle, root->payload.pos, force * scale);
-            root->payload.vel = a_vel;
+            for (size_t i = 0; i < p_len; i++) {
+                float distance = Vector2Distance(p[i].pos, middle);
+                Vector2 vel =
+                    Vector2PullVel(middle, p[i].pos, distance * scale);
+                p[i].vel = vel;
+            }
         }
 
-        graph_update(root);
-        graph_push(root);
-        graph_draw(root);
+        // apply repulsive force between nodes
+        for (size_t i = 0; i < p_len; i++) {
+            for (size_t j = 0; j < p_len; j++) {
+                if (i == j) continue;
 
+                Vector2 dir   = Vector2Subtract(p[j].pos, p[i].pos);
+                Vector2 force = Vector2DivideVal(
+                    dir, Vector2Length(dir) * Vector2Length(dir));
+                force = Vector2MultiplyVal(force, 100);
+
+                p[j].vel = Vector2Add(p[j].vel, force);
+                p[i].vel = Vector2Add(p[i].vel, Vector2Negate(force));
+            }
+        }
+
+        // apply forces between connected connections
+        {
+            for (size_t i = 0; i < connection_len; i++) {
+                Vector2 dis = Vector2MultiplyVal(
+                    Vector2Subtract(c_list[i].a->pos, c_list[i].b->pos), 0.2);
+                c_list[i].a->vel = Vector2Subtract(c_list[i].a->vel, dis);
+                c_list[i].b->vel = Vector2Add(c_list[i].b->vel, dis);
+            }
+        }
+
+        // update the position
+        for (size_t i = 0; i < p_len; i++) {
+            p[i].pos = Vector2Add(p[i].pos, p[i].vel);
+        }
+
+        // draw
+        for (size_t i = 0; i < p_len; i++) {
+            DrawCircleV(p[i].pos, 5, BLUE);
+        }
+        for (size_t i = 0; i < connection_len; i++) {
+            DrawLineV(c_list[i].a->pos, c_list[i].b->pos, BLUE);
+        }
+
+        // graph_update(root);
+        // graph_push(root);
+        // graph_draw(root);
         EndDrawing();
     }
     return EXIT_SUCCESS;
