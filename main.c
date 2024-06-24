@@ -221,6 +221,7 @@ int main(void)
                 Vector2 vel =
                     Vector2PullVel(middle, p[i].pos, distance * scale);
                 p[i].vel = vel;
+                // TODO: damp the value to reduce oscillations
             }
         }
 
@@ -229,10 +230,12 @@ int main(void)
             for (size_t j = 0; j < p_len; j++) {
                 if (i == j) continue;
 
-                Vector2 dir   = Vector2Subtract(p[j].pos, p[i].pos);
+                Vector2 dir = Vector2Subtract(p[j].pos, p[i].pos);
+                // TODO: the length of dir can get close to 0 so the divide
+                // close to infinity- cap it with some value
                 Vector2 force = Vector2DivideVal(
                     dir, Vector2Length(dir) * Vector2Length(dir));
-                force = Vector2MultiplyVal(force, 100);
+                force = Vector2MultiplyVal(force, 10);
 
                 p[j].vel = Vector2Add(p[j].vel, force);
                 p[i].vel = Vector2Add(p[i].vel, Vector2Negate(force));
