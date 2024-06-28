@@ -16,20 +16,22 @@
  * @param force pull force
  * @return the velocity of the pull that needs to apply
  */
-Vector2 Vector2PullVel(const Vector2 puller, const Vector2 pullee, float force)
+Vector2 Vector2PullForce(const Vector2 puller, const Vector2 pullee,
+                         float force_mult)
 {
     Vector2 direction           = Vector2Subtract(puller, pullee);
     Vector2 direction_normalize = Vector2Normalize(direction);
-    Vector2 vel                 = Vector2Scale(direction_normalize, force);
+    Vector2 force               = Vector2Scale(direction_normalize, force_mult);
 
-    return vel;
+    return force;
 }
 
 struct payload {
     char *name;
 
-    Vector2 pos;
     Vector2 vel;
+    Vector2 force;
+    Vector2 position;
 };
 
 struct node {
@@ -63,10 +65,10 @@ void destroy_graph(struct node *node)
 
 void graph_draw(struct node *root)
 {
-    DrawCircleV(root->payload.pos, 5, RED);
+    DrawCircleV(root->payload.position, 5, RED);
     for (size_t i = 0; i < root->len; i++) {
         struct node *child = root->data[i];
-        DrawLineV(root->payload.pos, child->payload.pos, BLUE);
+        DrawLineV(root->payload.position, child->payload.position, BLUE);
         graph_draw(child);
     }
 }
@@ -86,9 +88,12 @@ void graph_update(struct node *root)
         struct payload *a = &root->payload;
         struct payload *b = &root->data[i]->payload;
 
-        const float force = Vector2Distance(b->pos, a->pos) - keep_distance;
-        Vector2 a_vel     = Vector2PullVel(b->pos, a->pos, force * scale);
-        Vector2 b_vel     = Vector2PullVel(a->pos, b->pos, force * scale);
+        const float force =
+            Vector2Distance(b->position, a->position) - keep_distance;
+        Vector2 a_vel =
+            Vector2PullForce(b->position, a->position, force * scale);
+        Vector2 b_vel =
+            Vector2PullForce(a->position, b->position, force * scale);
 
         // also multiply decay
         a->vel = Vector2Scale(Vector2Add(a->vel, a_vel), decay);
@@ -98,7 +103,8 @@ void graph_update(struct node *root)
     }
 
     // update position of the node
-    root->payload.pos = Vector2Add(root->payload.pos, root->payload.vel);
+    root->payload.position =
+        Vector2Add(root->payload.position, root->payload.vel);
 }
 
 void add_random_node(struct node *root, size_t count)
@@ -108,8 +114,9 @@ void add_random_node(struct node *root, size_t count)
     for (size_t i = 0; i < count; i++) {
         char *node_name = malloc(15);
         sprintf(node_name, "rand - %ld", num++);
-        node_push(root, (struct payload){
-                            node_name, {rand() % 500, rand() % 500}, {0, 0}});
+        node_push(root,
+                  (struct payload){
+                      node_name, {0, 0}, {0, 0}, {rand() % 500, rand() % 500}});
     }
 }
 
@@ -146,9 +153,11 @@ void graph_push(struct node *root)
             struct payload *b = &node_list.data[i]->payload;
 
             const float force =
-                25 / (Vector2Distance(b->pos, a->pos) * 0.4 + 2);
-            Vector2 a_vel = Vector2PullVel(b->pos, a->pos, force * scale);
-            Vector2 b_vel = Vector2PullVel(a->pos, b->pos, force * scale);
+                25 / (Vector2Distance(b->position, a->position) * 0.4 + 2);
+            Vector2 a_vel =
+                Vector2PullForce(b->position, a->position, force * scale);
+            Vector2 b_vel =
+                Vector2PullForce(a->position, b->position, force * scale);
 
             // also multiply decay
             a->vel = Vector2Scale(Vector2Subtract(a->vel, a_vel), decay);
@@ -157,7 +166,8 @@ void graph_push(struct node *root)
     }
     for (size_t i = 0; i < node_list.len; i++) {
         struct node *node = node_list.data[i];
-        node->payload.pos = Vector2Add(node->payload.pos, node->payload.vel);
+        node->payload.position =
+            Vector2Add(node->payload.position, node->payload.vel);
     }
 }
 
@@ -183,7 +193,8 @@ int main(void)
     const int screen_width  = 1280;
     const int screen_height = 720;
 
-    struct node *root = node_create((struct payload){"foo", {50, 30}, {0, 0}});
+    struct node *root =
+        node_create((struct payload){"foo", {0, 0}, {0, 0}, {50, 30}});
     add_random_node(root, 10);
     add_random_node(root->data[0], 10);
 
@@ -192,7 +203,10 @@ int main(void)
     size_t p_len = 200;
     struct payload p[p_len];
     for (size_t i = 0; i < p_len; i++) {
-        p[i] = (struct payload){"r", {rand() % 500, rand() % 500}, {0, 0}};
+        p[i] = (struct payload){.name     = "r",
+                                .vel      = {0, 0},
+                                .force    = {0, 0},
+                                .position = {rand() % 500, rand() % 500}};
     }
 
     struct connection {
@@ -217,52 +231,55 @@ int main(void)
             const float scale = 0.1;
             Vector2 middle    = middle_of_screen();
             for (size_t i = 0; i < p_len; i++) {
-                float distance = Vector2Distance(p[i].pos, middle);
-                Vector2 vel =
-                    Vector2PullVel(middle, p[i].pos, distance * scale);
-                p[i].vel = vel;
+                float distance = Vector2Distance(p[i].position, middle);
+                Vector2 force =
+                    Vector2PullForce(middle, p[i].position, distance * scale);
+                p[i].force = force;
                 // TODO: damp the value to reduce oscillations
             }
         }
 
         // apply repulsive force between nodes
+        float distance = 50;
         for (size_t i = 0; i < p_len; i++) {
             for (size_t j = 0; j < p_len; j++) {
                 if (i == j) continue;
 
-                Vector2 dir = Vector2Subtract(p[j].pos, p[i].pos);
+                Vector2 dir = Vector2Subtract(p[j].position, p[i].position);
                 // TODO: the length of dir can get close to 0 so the divide
                 // close to infinity- cap it with some value
                 Vector2 force = Vector2DivideVal(
                     dir, Vector2Length(dir) * Vector2Length(dir));
-                force = Vector2MultiplyVal(force, 10);
+                force = Vector2MultiplyVal(force, distance);
 
-                p[j].vel = Vector2Add(p[j].vel, force);
-                p[i].vel = Vector2Add(p[i].vel, Vector2Negate(force));
+                p[j].force = Vector2Add(p[j].force, force);
+                p[i].force = Vector2Add(p[i].force, Vector2Negate(force));
             }
         }
 
         // apply forces between connected connections
         {
             for (size_t i = 0; i < connection_len; i++) {
-                Vector2 dis = Vector2MultiplyVal(
-                    Vector2Subtract(c_list[i].a->pos, c_list[i].b->pos), 0.2);
-                c_list[i].a->vel = Vector2Subtract(c_list[i].a->vel, dis);
-                c_list[i].b->vel = Vector2Add(c_list[i].b->vel, dis);
+                Vector2 dis =
+                    Vector2MultiplyVal(Vector2Subtract(c_list[i].a->position,
+                                                       c_list[i].b->position),
+                                       0.2);
+                c_list[i].a->force = Vector2Subtract(c_list[i].a->force, dis);
+                c_list[i].b->force = Vector2Add(c_list[i].b->force, dis);
             }
         }
 
         // update the position
         for (size_t i = 0; i < p_len; i++) {
-            p[i].pos = Vector2Add(p[i].pos, p[i].vel);
+            p[i].position = Vector2Add(p[i].position, p[i].force);
         }
 
         // draw
         for (size_t i = 0; i < p_len; i++) {
-            DrawCircleV(p[i].pos, 5, BLUE);
+            DrawCircleV(p[i].position, 5, BLUE);
         }
         for (size_t i = 0; i < connection_len; i++) {
-            DrawLineV(c_list[i].a->pos, c_list[i].b->pos, BLUE);
+            DrawLineV(c_list[i].a->position, c_list[i].b->position, BLUE);
         }
 
         // graph_update(root);
