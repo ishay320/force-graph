@@ -29,9 +29,9 @@ Vector2 Vector2PullForce(const Vector2 puller, const Vector2 pullee,
 struct payload {
     char *name;
 
-    Vector2 vel;
     Vector2 force;
     Vector2 position;
+    float mass;
 };
 
 struct node {
@@ -96,15 +96,15 @@ void graph_update(struct node *root)
             Vector2PullForce(a->position, b->position, force * scale);
 
         // also multiply decay
-        a->vel = Vector2Scale(Vector2Add(a->vel, a_vel), decay);
-        b->vel = Vector2Scale(Vector2Add(a->vel, b_vel), decay);
+        // a->vel = Vector2Scale(Vector2Add(a->vel, a_vel), decay);
+        // b->vel = Vector2Scale(Vector2Add(a->vel, b_vel), decay);
 
         graph_update(root->data[i]);
     }
 
     // update position of the node
-    root->payload.position =
-        Vector2Add(root->payload.position, root->payload.vel);
+    // root->payload.position =
+    //     Vector2Add(root->payload.position, root->payload.vel);
 }
 
 void add_random_node(struct node *root, size_t count)
@@ -160,14 +160,14 @@ void graph_push(struct node *root)
                 Vector2PullForce(a->position, b->position, force * scale);
 
             // also multiply decay
-            a->vel = Vector2Scale(Vector2Subtract(a->vel, a_vel), decay);
-            b->vel = Vector2Scale(Vector2Subtract(b->vel, b_vel), decay);
+            // a->vel = Vector2Scale(Vector2Subtract(a->vel, a_vel), decay);
+            // b->vel = Vector2Scale(Vector2Subtract(b->vel, b_vel), decay);
         }
     }
     for (size_t i = 0; i < node_list.len; i++) {
         struct node *node = node_list.data[i];
-        node->payload.position =
-            Vector2Add(node->payload.position, node->payload.vel);
+        // node->payload.position =
+        //     Vector2Add(node->payload.position, node->payload.vel);
     }
 }
 
@@ -187,14 +187,21 @@ Vector2 Vector2MultiplyVal(Vector2 v, float s)
     return result;
 }
 
+struct payload payload_create(char *name, Vector2 position, float size)
+{
+    float mass = (2 * PI * size) / 1.5;
+    return (struct payload){
+        .name = name, .force = {0, 0}, .position = position, .mass = mass};
+}
+
 int main(void)
 {
     srand(time(NULL));
     const int screen_width  = 1280;
     const int screen_height = 720;
 
-    struct node *root =
-        node_create((struct payload){"foo", {0, 0}, {0, 0}, {50, 30}});
+    struct node *root = node_create(
+        payload_create("r", (Vector2){rand() % 500, rand() % 500}, 6));
     add_random_node(root, 10);
     add_random_node(root->data[0], 10);
 
@@ -203,10 +210,7 @@ int main(void)
     size_t p_len = 200;
     struct payload p[p_len];
     for (size_t i = 0; i < p_len; i++) {
-        p[i] = (struct payload){.name     = "r",
-                                .vel      = {0, 0},
-                                .force    = {0, 0},
-                                .position = {rand() % 500, rand() % 500}};
+        p[i] = payload_create("r", (Vector2){rand() % 500, rand() % 500}, 1);
     }
 
     struct connection {
@@ -271,7 +275,8 @@ int main(void)
 
         // update the position
         for (size_t i = 0; i < p_len; i++) {
-            p[i].position = Vector2Add(p[i].position, p[i].force);
+            Vector2 velocity = Vector2DivideVal(p[i].force, p[i].mass);
+            p[i].position    = Vector2Add(p[i].position, velocity);
         }
 
         // draw
@@ -283,7 +288,6 @@ int main(void)
         }
 
         // graph_update(root);
-        // graph_push(root);
         // graph_draw(root);
         EndDrawing();
     }
