@@ -126,13 +126,15 @@ int main(void)
     struct connection *edges;
     edges = array_init_sized(struct connection, edges_len);
     for (size_t i = 0; i < edges_len; i++) {
-        edges[i] = (struct connection){&vertices[rand() % array_len(vertices)],
-                                       &vertices[rand() % array_len(vertices)]};
+        struct connection con = {&vertices[rand() % array_len(vertices)],
+                                 &vertices[rand() % array_len(vertices)]};
+        array_push(edges, con);
     }
 
     while (!WindowShouldClose())  // Detect window close button or ESC key
     {
-        update_nodes_pos(vertices, array_len(vertices), edges, edges_len);
+        update_nodes_pos(vertices, array_len(vertices), edges,
+                         array_len(edges));
 
         BeginDrawing();
         ClearBackground(RAYWHITE);
