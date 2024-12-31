@@ -5,7 +5,7 @@
 #include <stdlib.h>
 #include <time.h>
 
-#include "msl/array.h"
+#include "msl/graph.h"
 #include "rayext.h"
 
 struct payload {
@@ -62,42 +62,49 @@ void force_repulse_points(const Vector2 pos_a, const Vector2 pos_b,
     *force_b = Vector2Add(*force_b, Vector2Negate(force));
 }
 
-void update_nodes_pos(struct payload points[], size_t points_size,
-                      struct connection eadges[], size_t eadges_size)
+void update_nodes_pos(struct graph *g)
 {
     {  // gravity toward the middle of the screen
         const float scale = 0.1;
-        for (size_t i = 0; i < points_size; i++) {
-            points[i].force = force_to_middle(points[i].position, scale);
+        for (size_t i = 0; i < graph_nodes_count(g); i++) {
+            ((struct payload *)g->nodes[i].data)->force = force_to_middle(
+                ((struct payload *)g->nodes[i].data)->position, scale);
             // TODO: damp the value to reduce oscillations
         }
     }
 
     // apply repulsive force between nodes
     float distance = 50;
-    for (size_t i = 0; i < points_size; i++) {
-        for (size_t j = 0; j < points_size; j++) {
+    for (size_t i = 0; i < graph_nodes_count(g); i++) {
+        for (size_t j = 0; j < graph_nodes_count(g); j++) {
             if (i == j) continue;
-            force_repulse_points(points[j].position, points[i].position,
-                                 &points[j].force, &points[i].force, distance);
+            struct payload *point_i = g->nodes[i].data;
+            struct payload *point_j = g->nodes[j].data;
+            force_repulse_points(point_j->position, point_i->position,
+                                 &point_j->force, &point_i->force, distance);
         }
     }
 
     // apply forces between connected connections
     {
-        for (size_t i = 0; i < eadges_size; i++) {
+        for (size_t i = 0; i < graph_edges_count(g); i++) {
+            struct payload *edge_a =
+                graph_node_get(g, g->edges[i].id_node_from)->data;
+            struct payload *edge_b =
+                graph_node_get(g, g->edges[i].id_node_to)->data;
+
             Vector2 dis = Vector2MultiplyVal(
-                Vector2Subtract(eadges[i].a->position, eadges[i].b->position),
-                0.2);
-            eadges[i].a->force = Vector2Subtract(eadges[i].a->force, dis);
-            eadges[i].b->force = Vector2Add(eadges[i].b->force, dis);
+                Vector2Subtract(edge_a->position, edge_b->position), 0.2);
+            edge_a->force = Vector2Subtract(edge_a->force, dis);
+            edge_b->force = Vector2Add(edge_b->force, dis);
         }
     }
 
     // update the position
-    for (size_t i = 0; i < points_size; i++) {
-        Vector2 velocity   = Vector2DivideVal(points[i].force, points[i].mass);
-        points[i].position = Vector2Add(points[i].position, velocity);
+    for (size_t i = 0; i < graph_nodes_count(g); i++) {
+        struct payload *point_i = g->nodes[i].data;
+        Vector2 velocity  = Vector2DivideVal(point_i->force, point_i->mass);
+        point_i->position = Vector2Add(point_i->position, velocity);
     }
 }
 
@@ -112,40 +119,41 @@ int main(void)
 
     // create fake graph
     size_t vertices_len = 200;
-    struct payload *vertices;
-    vertices = array_init_sized(struct payload, 10);
+    struct graph *graph = graph_init();
 
     for (size_t i = 0; i < vertices_len; i++) {
-        array_push_rval(
-            vertices,
-            payload_create("r", (Vector2){rand() % 500, rand() % 500}, 1));
+        struct payload *p = malloc(sizeof(*p));
+        *p = payload_create("r", (Vector2){rand() % 500, rand() % 500}, 1);
+        graph_node_push(graph, p);
     }
 
     // create connections
     size_t edges_len = 200;
-    struct connection *edges;
-    edges = array_init_sized(struct connection, edges_len);
     for (size_t i = 0; i < edges_len; i++) {
-        struct connection con = {&vertices[rand() % array_len(vertices)],
-                                 &vertices[rand() % array_len(vertices)]};
-        array_push(edges, con);
+        graph_eadge_create(graph, rand() % graph_nodes_count(graph),
+                           rand() % graph_nodes_count(graph));
     }
 
     while (!WindowShouldClose())  // Detect window close button or ESC key
     {
-        update_nodes_pos(vertices, array_len(vertices), edges,
-                         array_len(edges));
+        update_nodes_pos(graph);
 
         BeginDrawing();
         ClearBackground(RAYWHITE);
         DrawFPS(10, 10);
 
         // draw
-        for (size_t i = 0; i < edges_len; i++) {
-            DrawCircleV(vertices[i].position, 5, BLUE);
+        for (size_t i = 0; i < graph_nodes_count(graph); i++) {
+            struct payload *vert_i = graph->nodes[i].data;
+            DrawCircleV(vert_i->position, 5, BLUE);
         }
-        for (size_t i = 0; i < edges_len; i++) {
-            DrawLineV(edges[i].a->position, edges[i].b->position, BLUE);
+        for (size_t i = 0; i < graph_edges_count(graph); i++) {
+            struct payload *edge_a =
+                graph_node_get(graph, graph->edges[i].id_node_from)->data;
+            struct payload *edge_b =
+                graph_node_get(graph, graph->edges[i].id_node_to)->data;
+
+            DrawLineV(edge_a->position, edge_b->position, BLUE);
         }
 
         EndDrawing();
